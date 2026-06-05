@@ -1,16 +1,16 @@
-slug: sky-ai-skills-video
-title: Sky AI Skills Video
+slug: sky-ai-workflow-demo
+title: Sky AI Workflow Demo
 github:
   owner: ErickRRB
-  repo: sky-ai-skills-video
-  url: https://github.com/ErickRRB/sky-ai-skills-video
+  repo: sky-ai-workflow-demo
+  url: https://github.com/ErickRRB/sky-ai-workflow-demo
 pages:
-  url: https://ErickRRB.github.io/sky-ai-skills-video/
+  url: https://ErickRRB.github.io/sky-ai-workflow-demo/
   source_branch: main
   source_path: /
 local:
   source_html: /Users/erick/Sky/output/sky-ai-video/sky-ai-skills-video.html
-  published_html: /Users/erick/Sky/html-docs/sky-ai-skills-video/index.html
+  published_html: /Users/erick/Sky/html-docs/sky-ai-workflow-demo/index.html
 notes:
   - Standalone static HTML served by GitHub Pages.
   - The WebM render button is client-side and should only be used manually.

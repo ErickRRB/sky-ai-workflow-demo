@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sky AI Skills Pipeline Video</title>
+<style>
+  :root {
+    --bg: #070b14;
+    --panel: #101827;
+    --line: #17385f;
+    --sky: #0ea5e9;
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --orange: #fbbf24;
+    --red: #fb7185;
+    --purple: #a78bfa;
+    --text: #e5edf7;
+    --muted: #91a3bb;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    gap: 18px;
+    padding: 28px;
+    background: radial-gradient(circle at 50% 20%, rgba(14,165,233,0.18), transparent 45%), var(--bg);
+    color: var(--text);
+    font-family: Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  canvas {
+    width: min(100%, 1280px);
+    aspect-ratio: 16 / 9;
+    border: 1px solid rgba(14,165,233,0.28);
+    border-radius: 12px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45), 0 0 60px rgba(14,165,233,0.16);
+    background: #070b14;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button, a {
+    appearance: none;
+    border: 1px solid rgba(14,165,233,0.48);
+    border-radius: 999px;
+    background: rgba(14,165,233,0.11);
+    color: #7dd3fc;
+    padding: 10px 16px;
+    font: 700 13px/1 Inter, "SF Pro Display", sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  select {
+    appearance: none;
+    border: 1px solid rgba(14,165,233,0.38);
+    border-radius: 999px;
+    background: rgba(7,11,20,0.82);
+    color: #b7d4e8;
+    padding: 9px 34px 9px 14px;
+    font: 700 13px/1 Inter, "SF Pro Display", sans-serif;
+  }
+
+  .status {
+    min-width: 280px;
+    color: var(--muted);
+    font: 600 13px/1.4 Inter, "SF Pro Display", sans-serif;
+  }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1280" height="720"></canvas>
+<div class="controls">
+  <button type="button" id="prevBtn">Escena anterior</button>
+  <button type="button" id="playBtn">Pausar</button>
+  <button type="button" id="nextBtn">Siguiente escena</button>
+  <select id="speedSelect" aria-label="Velocidad de preview">
+    <option value="0.5">0.5x lectura</option>
+    <option value="0.75">0.75x</option>
+    <option value="1" selected>1x normal</option>
+    <option value="1.25">1.25x</option>
+  </select>
+  <button type="button" id="renderBtn">Descargar WebM</button>
+  <a id="downloadLink" hidden download="sky-ai-skills-pipeline.webm">Descargar video</a>
+  <span class="status" id="status">Preview HTML. Espacio/click pausa. Flechas cambian escena.</span>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const prevBtn = document.getElementById('prevBtn');
+  const playBtn = document.getElementById('playBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const speedSelect = document.getElementById('speedSelect');
+  const renderBtn = document.getElementById('renderBtn');
+  const downloadLink = document.getElementById('downloadLink');
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const FPS = 30;
+
+  const colors = {
+    bg: '#070b14',
+    bg2: '#0b1220',
+    panel: '#101827',
+    panel2: '#132036',
+    line: '#17385f',
+    sky: '#0ea5e9',
+    sky2: '#38bdf8',
+    cyan: '#22d3ee',
+    green: '#34d399',
+    orange: '#fbbf24',
+    red: '#fb7185',
+    purple: '#a78bfa',
+    text: '#e5edf7',
+    muted: '#91a3bb',
+    dim: '#52647b'
+  };
+
+  const scenes = [
+    {
+      id: 'intro',
+      label: 'Pipeline',
+      duration: 5.6,
+      draw: drawIntro,
+      takeaway: 'Una forma repetible de convertir una necesidad de negocio en cambios revisables y evidencia para decidir.'
+    },
+    {
+      id: 'pain',
+      label: 'Antes',
+      duration: 5.0,
+      draw: drawPain,
+      takeaway: 'El mayor costo aparece cuando alcance, contexto y validacion llegan tarde o quedan dispersos.'
+    },
+    {
+      id: 'docs',
+      label: 'SkyDocs',
+      duration: 5.2,
+      draw: drawSkyDocs,
+      takeaway: 'Antes de actuar, la IA recibe contexto del sistema para proponer cambios con menos riesgo.'
+    },
+    {
+      id: 'spec',
+      label: 'Spec',
+      duration: 5.2,
+      draw: drawSpec,
+      takeaway: 'La solicitud se transforma en acuerdos claros: alcance, decisiones, reglas y criterios de exito.'
+    },
+    {
+      id: 'plan',
+      label: 'Plan',
+      duration: 5.3,
+      draw: drawPlan,
+      takeaway: 'El plan muestra que partes se tocan, en que orden y donde estan los riesgos de coordinacion.'
+    },
+    {
+      id: 'impl',
+      label: 'Implementacion',
+      duration: 5.3,
+      draw: drawImplementation,
+      takeaway: 'La IA acelera tareas operativas; el equipo tecnico mantiene control sobre impacto, calidad y decisiones.'
+    },
+    {
+      id: 'qa',
+      label: 'QA',
+      duration: 5.4,
+      draw: drawQA,
+      takeaway: 'La validacion deja de ser una revision informal y se convierte en evidencia accionable.'
+    },
+    {
+      id: 'fix',
+      label: 'Correccion',
+      duration: 5.3,
+      draw: drawFeedback,
+      takeaway: 'Cuando aparece un problema, el flujo lo convierte en correcciones acotadas y nueva evidencia.'
+    },
+    {
+      id: 'result',
+      label: 'Resultado',
+      duration: 5.3,
+      draw: drawResult,
+      takeaway: 'El cierre no oculta incertidumbre: separa lo validado, lo pendiente y lo que requiere decision.'
+    },
+    {
+      id: 'close',
+      label: 'Cierre',
+      duration: 5.4,
+      draw: drawClose,
+      takeaway: 'La ganancia es foco: las personas deciden mejor y la IA acelera ejecucion, documentacion y control.'
+    },
+    {
+      id: 'balance',
+      label: 'Balance',
+      duration: 6.0,
+      draw: drawBalance,
+      takeaway: 'El trabajo tecnico se mueve hacia orquestar problemas, curar contexto y mejorar skills para que el equipo sea mas consistente.'
+    }
+  ];
+
+  const totalDuration = scenes.reduce((sum, scene) => sum + scene.duration, 0);
+  let isRendering = false;
+  let isPaused = false;
+  let previewTime = 0;
+  let lastPreviewFrame = null;
+  let playbackRate = 1;
+
+  function clamp(v, min = 0, max = 1) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function easeOutCubic(t) {
+    t = clamp(t);
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function easeInOut(t) {
+    t = clamp(t);
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function sceneAt(time) {
+    let cursor = 0;
+    const t = ((time % totalDuration) + totalDuration) % totalDuration;
+    for (let index = 0; index < scenes.length; index += 1) {
+      const scene = scenes[index];
+      if (t <= cursor + scene.duration) {
+        const rawProgress = clamp((t - cursor) / scene.duration);
+        return {
+          scene,
+          index,
+          local: t - cursor,
+          progress: clamp(rawProgress / 0.74),
+          rawProgress
+        };
+      }
+      cursor += scene.duration;
+    }
+    const last = scenes[scenes.length - 1];
+    return { scene: last, index: scenes.length - 1, local: last.duration, progress: 1, rawProgress: 1 };
+  }
+
+  function sceneStart(index) {
+    return scenes.slice(0, index).reduce((sum, scene) => sum + scene.duration, 0);
+  }
+
+  function currentSceneIndex() {
+    return sceneAt(previewTime).index;
+  }
+
+  function updatePlayUi() {
+    playBtn.textContent = isPaused ? 'Reproducir' : 'Pausar';
+    const state = sceneAt(previewTime);
+    if (!isRendering) {
+      statusEl.textContent = `${isPaused ? 'Pausado' : 'Preview'} · escena ${state.index + 1}/${scenes.length}: ${state.scene.label} · ${playbackRate}x`;
+    }
+  }
+
+  function togglePause(force) {
+    isPaused = typeof force === 'boolean' ? force : !isPaused;
+    updatePlayUi();
+  }
+
+  function jumpToScene(index) {
+    const nextIndex = (index + scenes.length) % scenes.length;
+    previewTime = sceneStart(nextIndex) + scenes[nextIndex].duration * 0.82;
+    togglePause(true);
+    draw(previewTime);
+  }
+
+  function setSceneProgress(index, progress = 0.82) {
+    const nextIndex = (index + scenes.length) % scenes.length;
+    previewTime = sceneStart(nextIndex) + scenes[nextIndex].duration * clamp(progress);
+    togglePause(true);
+    draw(previewTime);
+  }
+
+  function draw(time) {
+    const state = sceneAt(time);
+    const fade = Math.min(1, state.rawProgress / 0.10, (1 - state.rawProgress) / 0.08);
+    drawBackground(time, state.index);
+    drawTopBar(state.index);
+    ctx.save();
+    ctx.globalAlpha = clamp(fade);
+    state.scene.draw(state.progress, state.local, time);
+    drawExecutiveTakeaway(state.scene.takeaway, state.progress);
+    ctx.restore();
+    drawProgress(time, state.index);
+  }
+
+  function drawBackground(time, sceneIndex) {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    const grad = ctx.createRadialGradient(W * 0.5, H * 0.18, 40, W * 0.5, H * 0.18, 720);
+    grad.addColorStop(0, 'rgba(14,165,233,0.11)');
+    grad.addColorStop(0.42, 'rgba(14,165,233,0.025)');
+    grad.addColorStop(1, 'rgba(7,11,20,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.010)';
+    for (let x = -40; x < W + 40; x += 34) {
+      for (let y = 80; y < H + 40; y += 34) {
+        const pulse = 0.30 + Math.sin(time * 1.3 + x * 0.025 + y * 0.018) * 0.12;
+        ctx.globalAlpha = pulse;
+        ctx.fillRect(x + 16, y, 2, 12);
+        ctx.fillRect(x + 11, y + 5, 12, 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    for (let i = 0; i < 28; i += 1) {
+      const x = (i * 137 + time * (8 + i % 4) + sceneIndex * 41) % (W + 120) - 60;
+      const y = 105 + ((i * 79 + sceneIndex * 23) % 540);
+      const r = 1.2 + (i % 4) * 0.5;
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(34,211,238,0.24)' : 'rgba(14,165,233,0.20)';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const vignette = ctx.createRadialGradient(W * 0.5, H * 0.47, 180, W * 0.5, H * 0.47, 780);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(0.62, 'rgba(0,0,0,0.18)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.62)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawTopBar(sceneIndex) {
+    ctx.fillStyle = 'rgba(7,11,20,0.78)';
+    ctx.fillRect(0, 0, W, 62);
+    ctx.strokeStyle = 'rgba(14,165,233,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(0, 62);
+    ctx.lineTo(W, 62);
+    ctx.stroke();
+
+    ctx.fillStyle = colors.sky2;
+    ctx.font = '700 16px Inter, sans-serif';
+    ctx.letterSpacing = '3px';
+    ctx.fillText('SKY AI SKILLS', 54, 39);
+    ctx.letterSpacing = '0px';
+    drawPlaneMark(31, 31, colors.sky2);
+
+    const active = scenes[sceneIndex].label;
+    pill(1015, 20, 176, 28, active, colors.sky, 'rgba(14,165,233,0.12)', 12);
+  }
+
+  function drawProgress(time, sceneIndex) {
+    const margin = 64;
+    const y = H - 29;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(margin, y, W - margin * 2, 5, 3);
+    ctx.fill();
+    ctx.fillStyle = colors.sky;
+    roundRect(margin, y, (W - margin * 2) * clamp(time / totalDuration), 5, 3);
+    ctx.fill();
+
+    const gap = 7;
+    const available = W - margin * 2 - gap * (scenes.length - 1);
+    const itemW = available / scenes.length;
+    let x = margin;
+    scenes.forEach((scene, index) => {
+      ctx.fillStyle = index === sceneIndex ? colors.sky2 : 'rgba(145,163,187,0.45)';
+      ctx.font = index === sceneIndex ? '700 10px Inter, sans-serif' : '600 10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(scene.label.toUpperCase(), x + itemW / 2, H - 9);
+      x += itemW + gap;
+    });
+    ctx.textAlign = 'left';
+  }
+
+  function drawIntro(p, local) {
+    const e = easeOutCubic(p);
+    pill(W / 2 - 143, 118, 286, 32, 'INGENIERIA AUMENTADA CON IA', colors.sky2, 'rgba(14,165,233,0.11)', 13);
+    gradientText('Pipeline de Desarrollo', W / 2, 248 - (1 - e) * 24, 62, 'center');
+    gradientText('con Agentes IA', W / 2, 322 - (1 - e) * 24, 62, 'center');
+
+    ctx.fillStyle = colors.muted;
+    ctx.font = '500 20px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    centeredWrapText('Demo de un caso real: necesidad, plan, cambios, validacion y evidencia de resultado.', W / 2, 380, 650, 29);
+
+    const metrics = [
+      ['33', 'Test Cases documentados'],
+      ['5+1', 'Ticket + deploy ref'],
+      ['4', 'Cambios abiertos'],
+      ['15', 'Evidencias']
+    ];
+    const startX = 285;
+    metrics.forEach((metric, i) => {
+      const appear = easeOutCubic(clamp((p - 0.28 - i * 0.06) / 0.36));
+      const value = metric[0] === '5+1' ? metric[0] : Math.round(Number(metric[0]) * appear).toString();
+      ctx.globalAlpha = appear;
+      ctx.fillStyle = colors.sky;
+      ctx.font = '800 46px Inter, sans-serif';
+      ctx.fillText(value, startX + i * 235, 505);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '700 12px Inter, sans-serif';
+      ctx.letterSpacing = '1.8px';
+      ctx.fillText(metric[1].toUpperCase(), startX + i * 235, 532);
+      ctx.letterSpacing = '0px';
+      ctx.globalAlpha = 1;
+    });
+
+    drawPulseRing(W / 2, 292, 330 + Math.sin(local * 2) * 8, colors.sky, 0.12);
+  }
+
+  function drawPain(p) {
+    titleBlock('Antes', 'El trabajo se vuelve lento cuando la informacion clave queda dispersa.', 104);
+    const cards = [
+      ['Alcance ambiguo', 'Cada persona puede entender el pedido y los casos borde de manera distinta.', colors.red],
+      ['Contexto disperso', 'Repos, Jira, Confluence, logs y decisiones viven separados.', colors.orange],
+      ['Validacion tardia', 'Los problemas aparecen al final y vuelven sin suficiente trazabilidad.', colors.purple]
+    ];
+    drawThreeCards(cards, p, 250, 230);
+
+    ctx.strokeStyle = 'rgba(251,113,133,0.35)';
+    ctx.lineWidth = 2;
+    dashedLine(178, 512, 1102, 512, 8, 10);
+    pill(492, 495, 296, 34, 'COSTO: RE-TRABAJO + CONTEXTO PERDIDO', colors.red, 'rgba(251,113,133,0.11)', 12);
+  }
+
+  function drawSkyDocs(p) {
+    titleBlock('SkyDocs como base de conocimiento', 'El agente parte del mapa real del sistema antes de proponer cambios.', 92);
+    const leftX = 155;
+    const docs = [
+      ['ARCHITECTURE.md', 'controllers, eventos, schemas'],
+      ['README / AGENTS', 'comandos y convenciones'],
+      ['SkyWorkflow', 'decisiones y evidencias']
+    ];
+    docs.forEach((doc, i) => {
+      const y = 238 + i * 88;
+      ctx.globalAlpha = easeOutCubic(clamp((p - i * 0.09) / 0.35));
+      card(leftX, y, 300, 72, 12, 'rgba(16,24,39,0.86)', 'rgba(167,139,250,0.35)');
+      ctx.fillStyle = colors.purple;
+      ctx.font = '800 15px Inter, sans-serif';
+      ctx.fillText(doc[0], leftX + 24, y + 30);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '600 13px Inter, sans-serif';
+      ctx.fillText(doc[1], leftX + 24, y + 52);
+      ctx.globalAlpha = 1;
+    });
+
+    drawArrow(565, 348, 610, 348, colors.purple, easeOutCubic(clamp((p - 0.28) / 0.35)));
+    drawNode(736, 348, 106, 'Planner', 'Spec + SkyDocs', colors.sky, easeOutCubic(clamp((p - 0.35) / 0.35)));
+    drawArrow(842, 348, 918, 348, colors.green, easeOutCubic(clamp((p - 0.44) / 0.35)));
+
+    card(920, 272, 270, 154, 18, 'rgba(16,24,39,0.9)', 'rgba(52,211,153,0.44)');
+    ctx.globalAlpha = easeOutCubic(clamp((p - 0.55) / 0.28));
+    ctx.fillStyle = colors.green;
+    ctx.font = '800 20px Inter, sans-serif';
+    ctx.fillText('Plan accionable', 950, 317);
+    bullet('rutas exactas', 953, 352, colors.green);
+    bullet('orden de dependencias', 953, 381, colors.green);
+    bullet('riesgos explicitos', 953, 410, colors.green);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSpec(p) {
+    titleBlock('1. Definicion del alcance', 'La solicitud se convierte en acuerdos claros antes de construir.', 94);
+    const left = 112;
+    const right = 725;
+    ['documento inicial', 'email de negocio', 'notas de reunion'].forEach((label, i) => {
+      const y = 248 + i * 72;
+      ctx.globalAlpha = easeOutCubic(clamp((p - i * 0.08) / 0.30));
+      pill(left, y, 235, 42, label, colors.muted, 'rgba(255,255,255,0.055)', 14);
+      drawArrow(left + 260, y + 21, 595, y + 21, colors.sky, 0.55);
+      ctx.globalAlpha = 1;
+    });
+
+    drawDocument(right, 224, 370, 246, colors.purple, easeOutCubic(clamp((p - 0.22) / 0.42)));
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 27px Inter, sans-serif';
+    ctx.fillText('Acuerdos de alcance', right + 34, 272);
+    bullet('problema y objetivo', right + 40, 318, colors.purple);
+    bullet('reglas de negocio', right + 40, 354, colors.purple);
+    bullet('criterios de exito', right + 40, 390, colors.purple);
+    bullet('supuestos y decisiones', right + 40, 426, colors.purple);
+
+    pill(448, 512, 382, 42, 'OUTPUT: alcance listo para planificar', colors.purple, 'rgba(167,139,250,0.12)', 13);
+  }
+
+  function drawPlan(p) {
+    titleBlock('2. Plan de ejecucion', 'El alcance se transforma en una secuencia de cambios con dependencias claras.', 92);
+    const nodes = [
+      ['get-reservation-bff', 184, 330, colors.sky],
+      ['util-state-mmb', 470, 292, colors.purple],
+      ['mmb-dashboard', 750, 330, colors.green],
+      ['mmb-exchange', 750, 438, colors.green],
+      ['GA4 / data-test', 1017, 374, colors.orange]
+    ];
+    drawArrow(292, 323, 396, 300, colors.sky, easeOutCubic(clamp((p - 0.18) / 0.24)));
+    drawArrow(540, 306, 674, 324, colors.purple, easeOutCubic(clamp((p - 0.25) / 0.24)));
+    drawArrow(538, 326, 680, 415, colors.purple, easeOutCubic(clamp((p - 0.31) / 0.24)));
+    drawArrow(824, 358, 944, 370, colors.green, easeOutCubic(clamp((p - 0.38) / 0.24)));
+    nodes.forEach((node, i) => {
+      drawNode(node[1], node[2], 74, node[0], '', node[3], easeOutCubic(clamp((p - i * 0.08) / 0.38)));
+    });
+
+    const steps = ['reglas backend', 'estado compartido', 'bloqueo en pantalla', 'control de flujo', 'metricas + tests'];
+    steps.forEach((step, i) => {
+      const x = 150 + i * 202;
+      const a = easeOutCubic(clamp((p - 0.48 - i * 0.05) / 0.24));
+      ctx.globalAlpha = a;
+      pill(x, 548, 164, 34, `${i + 1}. ${step}`, colors.cyan, 'rgba(34,211,238,0.10)', 11);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawImplementation(p) {
+    titleBlock('3. Implementacion asistida', 'La IA ejecuta tareas guiadas y deja trazabilidad para revisar.', 92);
+    drawTerminal(110, 226, 510, 256, p);
+    const cards = [
+      ['4 repos', 'BFF + store + 2 MFEs', colors.sky],
+      ['15 commits', 'cambios documentados', colors.green],
+      ['4 cambios', 'abiertos para revision', colors.purple]
+    ];
+    cards.forEach((item, i) => {
+      const x = 692 + (i % 2) * 230;
+      const y = 246 + Math.floor(i / 2) * 132;
+      ctx.globalAlpha = easeOutCubic(clamp((p - 0.22 - i * 0.09) / 0.28));
+      card(x, y, 205, 104, 16, 'rgba(16,24,39,0.88)', `${item[2]}88`);
+      ctx.fillStyle = item[2];
+      ctx.font = '800 31px Inter, sans-serif';
+      ctx.fillText(item[0], x + 22, y + 48);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '600 14px Inter, sans-serif';
+      ctx.fillText(item[1], x + 22, y + 74);
+      ctx.globalAlpha = 1;
+    });
+    pill(706, 512, 360, 40, 'ORDEN: BFF -> STORE -> MFEs', colors.green, 'rgba(52,211,153,0.11)', 13);
+  }
+
+  function drawQA(p) {
+    titleBlock('4. QA & testing', 'La validacion se planifica y se ejecuta con evidencia trazable.', 92);
+    card(108, 230, 345, 292, 18, 'rgba(16,24,39,0.88)', 'rgba(251,191,36,0.45)');
+    ctx.fillStyle = colors.orange;
+    ctx.font = '800 58px Inter, sans-serif';
+    ctx.fillText(Math.round(33 * easeOutCubic(clamp(p / 0.35))), 148, 310);
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 23px Inter, sans-serif';
+    ctx.fillText('Test Cases generados', 148, 349);
+    bullet('unit tests', 150, 394, colors.orange);
+    bullet('API integration con curl', 150, 429, colors.orange);
+    bullet('browser sobre dashboard', 150, 464, colors.orange);
+    bullet('GA4 y data-test', 150, 499, colors.orange);
+
+    const bugAlpha = easeOutCubic(clamp((p - 0.28) / 0.32));
+    ctx.globalAlpha = bugAlpha;
+    card(516, 254, 292, 210, 18, 'rgba(40,20,31,0.88)', 'rgba(251,113,133,0.54)');
+    ctx.fillStyle = colors.red;
+    ctx.font = '800 26px Inter, sans-serif';
+    ctx.fillText('BUG-01', 550, 306);
+    ctx.fillStyle = colors.text;
+    ctx.font = '700 18px Inter, sans-serif';
+    wrapText('Un dato obligatorio estaba mal validado y bloqueaba el flujo.', 550, 345, 222, 27);
+    pill(550, 405, 190, 32, '20 Test Cases bloqueados', colors.red, 'rgba(251,113,133,0.12)', 11);
+    ctx.globalAlpha = 1;
+
+    drawArrow(830, 360, 994, 360, colors.red, easeOutCubic(clamp((p - 0.5) / 0.28)));
+    card(958, 262, 222, 196, 18, 'rgba(16,24,39,0.88)', 'rgba(14,165,233,0.43)');
+    ctx.globalAlpha = easeOutCubic(clamp((p - 0.56) / 0.3));
+    ctx.fillStyle = colors.sky2;
+    ctx.font = '800 24px Inter, sans-serif';
+    ctx.fillText('Salida QA', 990, 314);
+    bullet('reproducible', 994, 354, colors.sky2);
+    bullet('ubicacion exacta', 994, 389, colors.sky2);
+    bullet('correccion sugerida', 994, 424, colors.sky2);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFeedback(p) {
+    titleBlock('5. Correccion post-QA', 'La vuelta de QA se convierte en ajustes concretos sobre los mismos cambios.');
+    const x = 180;
+    const y = 270;
+    drawLoopNode(x, y, 'Reporte QA', colors.orange, p, 0);
+    drawLoopNode(x + 280, y, 'Ajustes', colors.green, p, 0.16);
+    drawLoopNode(x + 560, y, 'Nueva prueba', colors.sky, p, 0.32);
+    drawLoopNode(x + 840, y, 'Cambios actualizados', colors.purple, p, 0.48);
+    drawArrow(x + 95, y, x + 205, y, colors.orange, easeOutCubic(clamp((p - 0.12) / 0.25)));
+    drawArrow(x + 375, y, x + 485, y, colors.green, easeOutCubic(clamp((p - 0.28) / 0.25)));
+    drawArrow(x + 655, y, x + 765, y, colors.sky, easeOutCubic(clamp((p - 0.44) / 0.25)));
+
+    card(235, 452, 808, 96, 16, 'rgba(16,24,39,0.9)', 'rgba(52,211,153,0.36)');
+    const bullets = ['validacion de datos', 'manejo de error', 'runtime definido', 'tests agregados'];
+    bullets.forEach((label, i) => {
+      ctx.globalAlpha = easeOutCubic(clamp((p - 0.55 - i * 0.05) / 0.22));
+      pill(266 + i * 188, 483, 158, 34, label, colors.green, 'rgba(52,211,153,0.10)', 11);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawResult(p) {
+    titleBlock('6. Paquete final de evidencia', 'El resultado separa lo validado, lo pendiente y lo que requiere decision.', 92);
+    const stats = [
+      ['9', 'PASS', colors.green],
+      ['1', 'blocker', colors.red],
+      ['1', 'observacion', colors.orange],
+      ['2', 'pendientes manuales', colors.purple]
+    ];
+    stats.forEach((stat, i) => {
+      const x = 170 + i * 245;
+      ctx.globalAlpha = easeOutCubic(clamp((p - i * 0.08) / 0.34));
+      card(x, 248, 190, 126, 18, 'rgba(16,24,39,0.88)', `${stat[2]}88`);
+      ctx.fillStyle = stat[2];
+      ctx.font = '800 50px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(stat[0], x + 95, 302);
+      ctx.fillStyle = colors.text;
+      ctx.font = '800 16px Inter, sans-serif';
+      wrapText(stat[1], x + 95, 334, 145, 22, 'center');
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    });
+
+    card(180, 440, 920, 98, 18, 'rgba(10,18,32,0.9)', 'rgba(14,165,233,0.34)');
+    const chips = ['Unit/API/dashboard OK', 'escenarios validados', 'exchange pendiente', 'sin deploy todavia'];
+    chips.forEach((chip, i) => {
+      ctx.globalAlpha = easeOutCubic(clamp((p - 0.42 - i * 0.07) / 0.25));
+      pill(218 + i * 210, 472, 178, 36, chip, i < 2 ? colors.green : colors.orange, 'rgba(14,165,233,0.08)', 11);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawClose(p) {
+    const e = easeOutCubic(p);
+    pill(W / 2 - 122, 122, 244, 32, 'NUEVA FORMA DE TRABAJO', colors.sky2, 'rgba(14,165,233,0.11)', 13);
+    gradientText('Equipo enfocado', W / 2, 246 - (1 - e) * 26, 52, 'center');
+    gradientText('en decidir', W / 2, 306 - (1 - e) * 26, 52, 'center');
+    gradientText('IA enfocada en ejecutar y documentar', W / 2, 372 - (1 - e) * 26, 40, 'center');
+    ctx.fillStyle = colors.muted;
+    ctx.font = '500 19px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    centeredWrapText('El equipo define objetivos, riesgos y prioridades. Los skills automatizan pasos operativos y dejan evidencia para revisar.', W / 2, 430, 760, 28);
+    ctx.textAlign = 'left';
+
+    const y = 520;
+    const items = [
+      ['Spec', colors.purple],
+      ['Plan', colors.sky],
+      ['Ejecucion', colors.green],
+      ['QA', colors.orange],
+      ['Fix', colors.cyan],
+      ['Deploy', colors.red]
+    ];
+    items.forEach((item, i) => {
+      const x = 250 + i * 145;
+      ctx.globalAlpha = easeOutCubic(clamp((p - 0.35 - i * 0.04) / 0.28));
+      pill(x, y, 96, 38, item[0], item[1], `${item[1]}22`, 13);
+      if (i < items.length - 1) drawArrow(x + 100, y + 19, x + 135, y + 19, colors.dim, 0.55);
+      ctx.globalAlpha = 1;
+    });
+
+    ctx.fillStyle = colors.sky2;
+    ctx.font = '800 17px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Sky AI Skills Pipeline', W / 2, 610);
+    ctx.textAlign = 'left';
+  }
+
+  function drawBalance(p) {
+    titleBlock(
+      '7. Balance operativo',
+      'No cambia solo la velocidad: cambia donde se concentra el criterio del equipo.',
+      88
+    );
+
+    const columns = [
+      {
+        title: 'Se gana',
+        color: colors.green,
+        bullets: [
+          'implementaciones mas rapidas',
+          'evidencia mas consistente',
+          'menos retrabajo por contexto perdido'
+        ]
+      },
+      {
+        title: 'Cambia el foco',
+        color: colors.sky2,
+        bullets: [
+          'de cada detalle de codigo',
+          'a orquestar alcance, repos y riesgos',
+          'a mejorar skills, prompts y validaciones'
+        ]
+      },
+      {
+        title: 'Hay que cuidar',
+        color: colors.orange,
+        bullets: [
+          'curar contexto y ejemplos',
+          'medir calidad y rendimiento',
+          'evitar exceso de outputs'
+        ]
+      }
+    ];
+
+    columns.forEach((column, i) => {
+      const x = 112 + i * 360;
+      const y = 246;
+      const a = easeOutCubic(clamp((p - 0.14 - i * 0.08) / 0.32));
+      ctx.save();
+      ctx.globalAlpha = a;
+      card(x, y, 316, 232, 18, 'rgba(16,24,39,0.90)', `${column.color}77`);
+      ctx.fillStyle = column.color;
+      ctx.font = '800 24px Inter, sans-serif';
+      ctx.fillText(column.title, x + 28, y + 52);
+
+      let cursorY = y + 95;
+      column.bullets.forEach((text, bulletIndex) => {
+        ctx.globalAlpha = a * easeOutCubic(clamp((p - 0.28 - i * 0.06 - bulletIndex * 0.05) / 0.24));
+        ctx.fillStyle = column.color;
+        ctx.beginPath();
+        ctx.arc(x + 31, cursorY - 7, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = colors.muted;
+        ctx.font = '600 16px Inter, sans-serif';
+        const lines = wrapText(text, x + 50, cursorY, 226, 22);
+        cursorY += Math.max(1, lines) * 22 + 14;
+      });
+      ctx.restore();
+    });
+
+    const a = easeOutCubic(clamp((p - 0.50) / 0.30));
+    ctx.save();
+    ctx.globalAlpha = a;
+    card(196, 512, 888, 46, 16, 'rgba(4,8,16,0.88)', 'rgba(34,211,238,0.36)');
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 18px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Trabajo repetible convertido en sistema: mas consistencia, mas velocidad y mejor control.', W / 2, 542);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  function titleBlock(title, subtitle, top = 120) {
+    ctx.fillStyle = colors.sky2;
+    ctx.font = '800 12px Inter, sans-serif';
+    ctx.letterSpacing = '4px';
+    ctx.textAlign = 'center';
+    ctx.fillText('AI SKILLS DEMO', W / 2, top);
+    ctx.letterSpacing = '0px';
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 44px Inter, sans-serif';
+    ctx.fillText(title, W / 2, top + 57);
+    ctx.fillStyle = colors.muted;
+    ctx.font = '500 19px Inter, sans-serif';
+    centeredWrapText(subtitle, W / 2, top + 98, 720, 28);
+    ctx.textAlign = 'left';
+  }
+
+  function drawExecutiveTakeaway(text, progress) {
+    const a = easeOutCubic(clamp((progress - 0.16) / 0.28));
+    if (a <= 0) return;
+    const x = 136;
+    const y = 585;
+    const w = 1008;
+    const h = 54;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 18;
+    card(x, y, w, h, 16, 'rgba(4,8,16,0.90)', 'rgba(14,165,233,0.42)');
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 17px Inter, sans-serif';
+    wrapText(text, x + 28, y + 34, w - 56, 22);
+    ctx.restore();
+  }
+
+  function drawThreeCards(cards, p, y, h = 246) {
+    cards.forEach((item, i) => {
+      const x = 122 + i * 355;
+      const a = easeOutCubic(clamp((p - 0.18 - i * 0.09) / 0.34));
+      ctx.globalAlpha = a;
+      card(x, y, 305, h, 18, 'rgba(16,24,39,0.88)', `${item[2]}77`);
+      ctx.fillStyle = item[2];
+      ctx.font = '800 22px Inter, sans-serif';
+      ctx.fillText(item[0], x + 26, y + 58);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '500 17px Inter, sans-serif';
+      wrapText(item[1], x + 26, y + 98, 242, 28);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawTerminal(x, y, w, h, p) {
+    card(x, y, w, h, 18, 'rgba(5,10,18,0.92)', 'rgba(14,165,233,0.35)');
+    ctx.fillStyle = '#111827';
+    roundRect(x, y, w, 42, 18);
+    ctx.fill();
+    ['#fb7185', '#fbbf24', '#34d399'].forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(x + 28 + i * 22, y + 21, 6, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    const lines = [
+      '$ sky-plan-implementer VC-XXXX',
+      '✓ branch feature/VC-XXXX',
+      '✓ update get-reservation-bff',
+      '✓ update util-state-mmb',
+      '✓ update mmb-dashboard',
+      '✓ update mmb-exchange',
+      '✓ evidencia lista para revision'
+    ];
+    lines.forEach((line, i) => {
+      if (p < 0.12 + i * 0.09) return;
+      ctx.fillStyle = i === 0 ? colors.sky2 : colors.green;
+      ctx.font = '700 18px "SF Mono", Consolas, monospace';
+      ctx.fillText(line, x + 28, y + 78 + i * 27);
+    });
+  }
+
+  function drawNode(x, y, r, title, subtitle, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    drawPulseRing(x, y, r + 22, color, 0.13);
+    const grad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 8, x, y, r);
+    grad.addColorStop(0, `${color}55`);
+    grad.addColorStop(1, 'rgba(16,24,39,0.94)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = colors.text;
+    ctx.font = '800 16px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    wrapText(title, x, y - (subtitle ? 8 : -6), r * 1.42, 20, 'center');
+    if (subtitle) {
+      ctx.fillStyle = colors.muted;
+      ctx.font = '600 12px Inter, sans-serif';
+      wrapText(subtitle, x, y + 18, r * 1.35, 16, 'center');
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  function drawLoopNode(x, y, label, color, p, offset) {
+    const a = easeOutCubic(clamp((p - offset) / 0.34));
+    ctx.globalAlpha = a;
+    drawPulseRing(x, y, 78, color, 0.15);
+    card(x - 80, y - 48, 160, 96, 18, 'rgba(16,24,39,0.9)', `${color}88`);
+    ctx.fillStyle = color;
+    ctx.font = '800 18px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    wrapText(label, x, y - 2, 126, 23, 'center');
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+  }
+
+  function drawDocument(x, y, w, h, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    card(x, y, w, h, 18, 'rgba(16,24,39,0.92)', `${color}88`);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    roundRect(x + w - 82, y, 82, 82, 0);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + w - 82, y);
+    ctx.lineTo(x + w, y + 82);
+    ctx.strokeStyle = `${color}99`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function card(x, y, w, h, r, fill, stroke) {
+    ctx.fillStyle = fill;
+    roundRect(x, y, w, h, r);
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
+  function pill(x, y, w, h, text, color, fill, fontSize = 12) {
+    ctx.fillStyle = fill;
+    roundRect(x, y, w, h, h / 2);
+    ctx.fill();
+    ctx.strokeStyle = `${color}aa`;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.font = `800 ${fontSize}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+  }
+
+  function bullet(text, x, y, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y - 5, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = colors.muted;
+    ctx.font = '600 16px Inter, sans-serif';
+    ctx.fillText(text, x + 17, y);
+  }
+
+  function drawArrow(x1, y1, x2, y2, color, alpha = 1) {
+    if (alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const ex = x1 + dx * alpha;
+    const ey = y1 + dy * alpha;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    if (alpha > 0.85) {
+      const angle = Math.atan2(dy, dx);
+      const hx = ex;
+      const hy = ey;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx - 14 * Math.cos(angle - 0.45), hy - 14 * Math.sin(angle - 0.45));
+      ctx.lineTo(hx - 14 * Math.cos(angle + 0.45), hy - 14 * Math.sin(angle + 0.45));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function dashedLine(x1, y1, x2, y2, dash, gap) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    let dist = 0;
+    ctx.beginPath();
+    while (dist < len) {
+      ctx.moveTo(x1 + ux * dist, y1 + uy * dist);
+      dist += dash;
+      ctx.lineTo(x1 + ux * Math.min(dist, len), y1 + uy * Math.min(dist, len));
+      dist += gap;
+    }
+    ctx.stroke();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  function gradientText(text, x, y, size, align = 'left') {
+    ctx.save();
+    const grad = ctx.createLinearGradient(x - 300, y - size, x + 300, y + size);
+    grad.addColorStop(0, '#eaf7ff');
+    grad.addColorStop(0.46, colors.sky2);
+    grad.addColorStop(1, colors.cyan);
+    ctx.font = `900 ${size}px Inter, "SF Pro Display", sans-serif`;
+    ctx.textAlign = align;
+    ctx.lineWidth = Math.max(5, size * 0.085);
+    ctx.strokeStyle = 'rgba(3,7,18,0.82)';
+    ctx.strokeText(text, x, y);
+    ctx.shadowColor = 'rgba(14,165,233,0.22)';
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = grad;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  function wrapText(text, x, y, maxWidth, lineHeight, align = 'left') {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    ctx.textAlign = align;
+    lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+    ctx.textAlign = 'left';
+    return lines.length;
+  }
+
+  function centeredWrapText(text, centerX, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    ctx.textAlign = 'left';
+    lines.forEach((l, i) => {
+      const lineWidth = ctx.measureText(l).width;
+      ctx.fillText(l, centerX - lineWidth / 2, y + i * lineHeight);
+    });
+    return lines.length;
+  }
+
+  function drawPulseRing(x, y, r, color, alpha) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPlaneMark(x, y, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.15);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(-9, -3);
+    ctx.lineTo(10, 0);
+    ctx.lineTo(-9, 3);
+    ctx.lineTo(-4, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  async function renderVideo() {
+    if (!canvas.captureStream || !window.MediaRecorder) {
+      throw new Error('Este navegador no soporta canvas.captureStream o MediaRecorder.');
+    }
+    const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    const stream = canvas.captureStream(FPS);
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 4500000
+    });
+    const chunks = [];
+    recorder.ondataavailable = event => {
+      if (event.data && event.data.size) chunks.push(event.data);
+    };
+    const stopped = new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = event => reject(event.error || new Error('MediaRecorder error'));
+    });
+
+    isRendering = true;
+    recorder.start(1000);
+    const renderStart = performance.now();
+
+    await new Promise(resolve => {
+      function step(now) {
+        const elapsed = (now - renderStart) / 1000;
+        draw(Math.min(elapsed, totalDuration - 0.001));
+        statusEl.textContent = `Renderizando video... ${Math.min(100, Math.round(elapsed / totalDuration * 100))}%`;
+        if (elapsed < totalDuration) {
+          requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      }
+      requestAnimationFrame(step);
+    });
+
+    recorder.stop();
+    await stopped;
+    stream.getTracks().forEach(track => track.stop());
+    isRendering = false;
+    lastPreviewFrame = null;
+    updatePlayUi();
+    return new Blob(chunks, { type: mimeType || 'video/webm' });
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        resolve(result.includes(',') ? result.split(',')[1] : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  window.renderSkyAiVideoBlob = renderVideo;
+  window.renderSkyAiVideoBase64 = async () => blobToBase64(await renderVideo());
+  window.skyAiVideoInfo = { width: W, height: H, fps: FPS, duration: totalDuration, scenes: scenes.map(s => s.label) };
+  window.skyAiJumpToScene = jumpToScene;
+  window.skyAiSetSceneProgress = setSceneProgress;
+  window.skyAiTogglePause = togglePause;
+
+  renderBtn.addEventListener('click', async () => {
+    renderBtn.disabled = true;
+    downloadLink.hidden = true;
+    try {
+      const blob = await renderVideo();
+      const url = URL.createObjectURL(blob);
+      downloadLink.href = url;
+      downloadLink.hidden = false;
+      statusEl.textContent = `Listo: ${(blob.size / 1024 / 1024).toFixed(1)} MB WebM.`;
+    } catch (error) {
+      statusEl.textContent = `Error: ${error.message}`;
+    } finally {
+      renderBtn.disabled = false;
+    }
+  });
+
+  playBtn.addEventListener('click', () => togglePause());
+  prevBtn.addEventListener('click', () => jumpToScene(currentSceneIndex() - 1));
+  nextBtn.addEventListener('click', () => jumpToScene(currentSceneIndex() + 1));
+  speedSelect.addEventListener('change', () => {
+    playbackRate = Number(speedSelect.value) || 1;
+    updatePlayUi();
+  });
+  canvas.addEventListener('click', () => togglePause());
+  document.addEventListener('keydown', event => {
+    if (event.key === ' ' || event.code === 'Space') {
+      event.preventDefault();
+      togglePause();
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      jumpToScene(currentSceneIndex() + 1);
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      jumpToScene(currentSceneIndex() - 1);
+    }
+  });
+
+  requestAnimationFrame(previewLoop);
+
+  function previewLoop(now) {
+    if (!isRendering) {
+      if (lastPreviewFrame === null) lastPreviewFrame = now;
+      const delta = Math.min(0.12, (now - lastPreviewFrame) / 1000);
+      lastPreviewFrame = now;
+      if (!isPaused) previewTime = (previewTime + delta * playbackRate) % totalDuration;
+      draw(previewTime);
+      updatePlayUi();
+    }
+    requestAnimationFrame(previewLoop);
+  }
+})();
+</script>
+</body>
+</html>
